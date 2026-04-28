@@ -104,7 +104,8 @@ fn repay_with_interest_releases_loan() {
     ctx.vault.deposit(&alice, &200_000_000);
     ctx.vault.borrow(&bob, &100_000_000, &110_000_000, &86_400);
 
-    advance(&ctx.env, 86_400);
+    // accrue interest but stay strictly before the deadline
+    advance(&ctx.env, 80_000);
 
     let interest = ctx.vault.repay(&bob);
 
@@ -113,6 +114,23 @@ fn repay_with_interest_releases_loan() {
     let (total, borrowed) = ctx.vault.pool_state();
     assert_eq!(borrowed, 0);
     assert_eq!(total, 200_000_000 + interest);
+}
+
+#[test]
+fn repay_after_deadline_returns_error() {
+    let ctx = setup();
+    let alice = Address::generate(&ctx.env);
+    let bob = Address::generate(&ctx.env);
+
+    ctx.vault.deposit(&alice, &200_000_000);
+    ctx.vault.borrow(&bob, &100_000_000, &110_000_000, &86_400);
+
+    advance(&ctx.env, 86_400);
+
+    let result = ctx.vault.try_repay(&bob);
+    assert_eq!(result, Err(Ok(Error::DeadlinePassed)));
+    // loan must still be open so a liquidator can claim the collateral
+    assert!(ctx.vault.loan_of(&bob).is_some());
 }
 
 #[test]

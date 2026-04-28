@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useWallet } from "@/app/wallet-context";
 import { useLoan, usePoolState } from "@/hooks/use-pool";
 import { useBorrow, useRepay } from "@/hooks/use-vault-actions";
@@ -18,15 +18,26 @@ function fmtXlm(stroops?: bigint): string {
   return (Number(stroops) / 1e7).toFixed(4).replace(/\.?0+$/, "");
 }
 
-function timeLeft(deadline: bigint): string {
-  const now = Math.floor(Date.now() / 1000);
-  const seconds = Number(deadline) - now;
+function timeLeft(deadline: bigint, nowSec: number): string {
+  const seconds = Number(deadline) - nowSec;
   if (seconds <= 0) return "Past deadline";
   const days = Math.floor(seconds / 86_400);
   const hours = Math.floor((seconds % 86_400) / 3600);
-  if (days > 0) return `${days}d ${hours}h left`;
   const mins = Math.floor((seconds % 3600) / 60);
-  return `${hours}h ${mins}m left`;
+  const secs = seconds % 60;
+  if (days > 0) return `${days}d ${hours}h ${mins}m left`;
+  if (hours > 0) return `${hours}h ${mins}m ${secs}s left`;
+  if (mins > 0) return `${mins}m ${secs}s left`;
+  return `${secs}s left`;
+}
+
+function useNow() {
+  const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
+  useEffect(() => {
+    const id = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return now;
 }
 
 export function BorrowerCard() {
@@ -35,6 +46,7 @@ export function BorrowerCard() {
   const { data: pool } = usePoolState();
   const borrow = useBorrow(address);
   const repay = useRepay(address);
+  const nowSec = useNow();
 
   const [principal, setPrincipal] = useState("");
   const [duration, setDuration] = useState("7");
@@ -92,7 +104,6 @@ export function BorrowerCard() {
 
   if (hasOpenLoan && data.loan) {
     const deadlineSec = Number(data.loan.deadline);
-    const nowSec = Math.floor(Date.now() / 1000);
     const isPastDeadline = nowSec >= deadlineSec;
 
     return (
@@ -106,7 +117,7 @@ export function BorrowerCard() {
               isPastDeadline ? "text-danger" : "text-accent"
             }`}
           >
-            {timeLeft(data.loan.deadline)}
+            {timeLeft(data.loan.deadline, nowSec)}
           </div>
         </div>
         <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">

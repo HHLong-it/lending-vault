@@ -226,10 +226,6 @@ export function BorrowerCard() {
             <option value="days">days</option>
           </select>
         </div>
-        <div className="mt-1 text-[11px] text-subtle">
-          Tip: pick a short duration (e.g. 2 minutes) so you can demo liquidation
-          quickly.
-        </div>
       </div>
       <button
         type="submit"

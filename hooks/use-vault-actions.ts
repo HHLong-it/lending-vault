@@ -1,0 +1,136 @@
+"use client";
+
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { networkPassphrase } from "@/lib/stellar";
+import {
+  invokeContract,
+  addrArg,
+  i128Arg,
+  u64Arg,
+  xlmToStroops,
+} from "@/lib/soroban";
+import { StellarWalletsKit } from "@/lib/wallets";
+
+const VAULT_ID = process.env.NEXT_PUBLIC_MAIN_CONTRACT_ID;
+
+function signer(address: string) {
+  return async (xdr: string) => {
+    const { signedTxXdr } = await StellarWalletsKit.signTransaction(xdr, {
+      address,
+      networkPassphrase,
+    });
+    return signedTxXdr;
+  };
+}
+
+function ensureVaultId() {
+  if (!VAULT_ID) throw new Error("NEXT_PUBLIC_MAIN_CONTRACT_ID is not set");
+  return VAULT_ID;
+}
+
+function invalidateAll(qc: ReturnType<typeof useQueryClient>) {
+  qc.invalidateQueries({ queryKey: ["balance"] });
+  qc.invalidateQueries({ queryKey: ["pool-state"] });
+  qc.invalidateQueries({ queryKey: ["lp-balance"] });
+  qc.invalidateQueries({ queryKey: ["loan"] });
+  qc.invalidateQueries({ queryKey: ["events"] });
+}
+
+export function useDeposit(address: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (xlm: string): Promise<{ hash: string }> => {
+      if (!address) throw new Error("connect a wallet first");
+      const id = ensureVaultId();
+      return invokeContract({
+        contractId: id,
+        method: "deposit",
+        args: [addrArg(address), i128Arg(xlmToStroops(xlm))],
+        source: address,
+        signXdr: signer(address),
+      });
+    },
+    onSuccess: () => invalidateAll(qc),
+  });
+}
+
+export function useWithdraw(address: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (shares: string): Promise<{ hash: string }> => {
+      if (!address) throw new Error("connect a wallet first");
+      const id = ensureVaultId();
+      return invokeContract({
+        contractId: id,
+        method: "withdraw",
+        args: [addrArg(address), i128Arg(xlmToStroops(shares))],
+        source: address,
+        signXdr: signer(address),
+      });
+    },
+    onSuccess: () => invalidateAll(qc),
+  });
+}
+
+export function useBorrow(address: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      principal: string;
+      collateral: string;
+      durationDays: number;
+    }): Promise<{ hash: string }> => {
+      if (!address) throw new Error("connect a wallet first");
+      const id = ensureVaultId();
+      return invokeContract({
+        contractId: id,
+        method: "borrow",
+        args: [
+          addrArg(address),
+          i128Arg(xlmToStroops(input.principal)),
+          i128Arg(xlmToStroops(input.collateral)),
+          u64Arg(input.durationDays * 86_400),
+        ],
+        source: address,
+        signXdr: signer(address),
+      });
+    },
+    onSuccess: () => invalidateAll(qc),
+  });
+}
+
+export function useRepay(address: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (): Promise<{ hash: string }> => {
+      if (!address) throw new Error("connect a wallet first");
+      const id = ensureVaultId();
+      return invokeContract({
+        contractId: id,
+        method: "repay",
+        args: [addrArg(address)],
+        source: address,
+        signXdr: signer(address),
+      });
+    },
+    onSuccess: () => invalidateAll(qc),
+  });
+}
+
+export function useLiquidate(address: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (borrower: string): Promise<{ hash: string }> => {
+      if (!address) throw new Error("connect a wallet first");
+      const id = ensureVaultId();
+      return invokeContract({
+        contractId: id,
+        method: "liquidate",
+        args: [addrArg(address), addrArg(borrower)],
+        source: address,
+        signXdr: signer(address),
+      });
+    },
+    onSuccess: () => invalidateAll(qc),
+  });
+}

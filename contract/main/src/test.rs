@@ -1,0 +1,168 @@
+#![cfg(test)]
+
+use super::{Error, Vault, VaultClient};
+use receipt_token::{ReceiptToken, ReceiptTokenClient};
+use soroban_sdk::{testutils::{Address as _, Ledger}, Address, Env};
+
+struct Ctx<'a> {
+    env: Env,
+    vault: VaultClient<'a>,
+    lp: ReceiptTokenClient<'a>,
+}
+
+fn setup<'a>() -> Ctx<'a> {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let placeholder = Address::generate(&env);
+    let lp_id = env.register(ReceiptToken, (placeholder,));
+
+    let vault_id = env.register(Vault, (lp_id.clone(),));
+
+    let lp = ReceiptTokenClient::new(&env, &lp_id);
+    lp.set_admin(&vault_id);
+
+    Ctx {
+        vault: VaultClient::new(&env, &vault_id),
+        lp,
+        env,
+    }
+}
+
+fn advance(env: &Env, seconds: u64) {
+    env.ledger().with_mut(|li| {
+        li.timestamp = li.timestamp.saturating_add(seconds);
+    });
+}
+
+#[test]
+fn first_deposit_mints_one_for_one() {
+    let ctx = setup();
+    let alice = Address::generate(&ctx.env);
+
+    let shares = ctx.vault.deposit(&alice, &100_000_000);
+
+    assert_eq!(shares, 100_000_000);
+    assert_eq!(ctx.lp.balance(&alice), 100_000_000);
+    assert_eq!(ctx.lp.total_supply(), 100_000_000);
+    let (total, borrowed) = ctx.vault.pool_state();
+    assert_eq!(total, 100_000_000);
+    assert_eq!(borrowed, 0);
+}
+
+#[test]
+fn subsequent_deposit_uses_share_price() {
+    let ctx = setup();
+    let alice = Address::generate(&ctx.env);
+    let bob = Address::generate(&ctx.env);
+
+    ctx.vault.deposit(&alice, &100_000_000);
+    let bob_shares = ctx.vault.deposit(&bob, &50_000_000);
+
+    assert_eq!(bob_shares, 50_000_000);
+    assert_eq!(ctx.lp.balance(&bob), 50_000_000);
+    assert_eq!(ctx.lp.total_supply(), 150_000_000);
+}
+
+#[test]
+fn borrow_under_ltv_succeeds() {
+    let ctx = setup();
+    let alice = Address::generate(&ctx.env);
+    let bob = Address::generate(&ctx.env);
+
+    ctx.vault.deposit(&alice, &200_000_000);
+
+    let deadline = ctx.vault.borrow(&bob, &100_000_000, &110_000_000, &86_400);
+
+    assert!(deadline > 0);
+    let loan = ctx.vault.loan_of(&bob).unwrap();
+    assert_eq!(loan.principal, 100_000_000);
+    assert_eq!(loan.collateral, 110_000_000);
+    let (_, borrowed) = ctx.vault.pool_state();
+    assert_eq!(borrowed, 100_000_000);
+}
+
+#[test]
+fn borrow_over_ltv_returns_error() {
+    let ctx = setup();
+    let alice = Address::generate(&ctx.env);
+    let bob = Address::generate(&ctx.env);
+
+    ctx.vault.deposit(&alice, &200_000_000);
+
+    let result = ctx.vault.try_borrow(&bob, &100_000_000, &109_000_000, &86_400);
+    assert!(matches!(result, Err(Ok(Error::InsufficientCollateral))));
+    assert!(ctx.vault.loan_of(&bob).is_none());
+}
+
+#[test]
+fn repay_with_interest_releases_loan() {
+    let ctx = setup();
+    let alice = Address::generate(&ctx.env);
+    let bob = Address::generate(&ctx.env);
+
+    ctx.vault.deposit(&alice, &200_000_000);
+    ctx.vault.borrow(&bob, &100_000_000, &110_000_000, &86_400);
+
+    advance(&ctx.env, 86_400);
+
+    let interest = ctx.vault.repay(&bob);
+
+    assert!(interest > 0);
+    assert!(ctx.vault.loan_of(&bob).is_none());
+    let (total, borrowed) = ctx.vault.pool_state();
+    assert_eq!(borrowed, 0);
+    assert_eq!(total, 200_000_000 + interest);
+}
+
+#[test]
+fn liquidate_past_deadline_clears_loan() {
+    let ctx = setup();
+    let alice = Address::generate(&ctx.env);
+    let bob = Address::generate(&ctx.env);
+    let carol = Address::generate(&ctx.env);
+
+    ctx.vault.deposit(&alice, &200_000_000);
+    ctx.vault.borrow(&bob, &100_000_000, &110_000_000, &86_400);
+
+    advance(&ctx.env, 86_401);
+
+    let collateral_claimed = ctx.vault.liquidate(&carol, &bob);
+
+    assert_eq!(collateral_claimed, 110_000_000);
+    assert!(ctx.vault.loan_of(&bob).is_none());
+    let (_, borrowed) = ctx.vault.pool_state();
+    assert_eq!(borrowed, 0);
+}
+
+#[test]
+fn liquidate_before_deadline_returns_error() {
+    let ctx = setup();
+    let alice = Address::generate(&ctx.env);
+    let bob = Address::generate(&ctx.env);
+    let carol = Address::generate(&ctx.env);
+
+    ctx.vault.deposit(&alice, &200_000_000);
+    ctx.vault.borrow(&bob, &100_000_000, &110_000_000, &86_400);
+
+    advance(&ctx.env, 1000);
+
+    let result = ctx.vault.try_liquidate(&carol, &bob);
+    assert!(matches!(result, Err(Ok(Error::NotPastDeadline))));
+}
+
+#[test]
+fn debt_grows_over_time() {
+    let ctx = setup();
+    let alice = Address::generate(&ctx.env);
+    let bob = Address::generate(&ctx.env);
+
+    ctx.vault.deposit(&alice, &200_000_000);
+    ctx.vault.borrow(&bob, &100_000_000, &110_000_000, &86_400);
+
+    let debt_at_open = ctx.vault.debt_of(&bob);
+    advance(&ctx.env, 30_000);
+    let debt_30k_secs_later = ctx.vault.debt_of(&bob);
+
+    assert!(debt_30k_secs_later > debt_at_open);
+}

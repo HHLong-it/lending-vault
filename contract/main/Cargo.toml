@@ -1,0 +1,16 @@
+[package]
+name = "main-contract"
+version = { workspace = true }
+edition = { workspace = true }
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+soroban-sdk = { workspace = true }
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
+# Receipt-token dev-dep is needed only when the concept does inter-contract calls
+# into the SEP-41 token. new-project.sh removes this line if uses_custom_token: false.
+receipt-token = { path = "../receipt" }

@@ -10,8 +10,8 @@ vault:      CCVEILXHBWQGKCA6B546OV4HENG2OSKDGKFMREOBDM7OUUFDDFP5D5KR
             https://stellar.expert/explorer/testnet/contract/CCVEILXHBWQGKCA6B546OV4HENG2OSKDGKFMREOBDM7OUUFDDFP5D5KR
 lp_shares:  CCMREGHT4T75OG3PRJIQCSOW5RUQY4HEVTD7FTHYOLSLNCSZN36SRPUM
             https://stellar.expert/explorer/testnet/contract/CCMREGHT4T75OG3PRJIQCSOW5RUQY4HEVTD7FTHYOLSLNCSZN36SRPUM
-demo:       (Vercel URL goes here)
-video:      (1-min walkthrough goes here)
+demo: https://lending-vault-dun.vercel.app/
+video: https://drive.google.com/file/d/1lo0K5qAlsBXkDnD1DGl5mG7Q8jaAcNx2/view?usp=sharing    
 ```
 
 ## Features
@@ -254,16 +254,14 @@ See [`deploy.md`](./deploy.md) for the full walkthrough.
 
 | | |
 |---|---|
-| Wallet picker | ![Wallet picker](docs/screenshots/wallet-picker.png) |
-| Pool stats + lender card | ![Lender](docs/screenshots/lender.png) |
-| Borrower form | ![Borrower](docs/screenshots/borrower.png) |
-| Open loan with debt clock | ![Open loan](docs/screenshots/open-loan.png) |
-| Live activity feed | ![Events](docs/screenshots/events.png) |
-| Mobile view | ![Mobile](docs/screenshots/mobile.png) |
-| CI passing | ![CI](docs/screenshots/ci.png) |
-| Cargo test output | ![Tests](docs/screenshots/tests.png) |
+| Pool stats | <img width="1187" height="521" alt="image" src="https://github.com/user-attachments/assets/8208e211-aac0-4f7a-a2a6-f67da3e4bb2c" />|
+| Lender + Borrower form | <img width="1161" height="555" alt="image" src="https://github.com/user-attachments/assets/e371e48c-9011-4acb-8752-54432d7d3e2a" />|
+| Live activity feed | <img width="1185" height="704" alt="image" src="https://github.com/user-attachments/assets/404426e3-df11-41d3-b2d8-3bffbd9e6730" />|
+| Mobile view | <img width="390" height="621" alt="image" src="https://github.com/user-attachments/assets/6baa251b-222e-4ae3-a9d3-5a1ff43a7d53" />|
+| CI passing | <img width="907" height="160" alt="image" src="https://github.com/user-attachments/assets/ceeb3d50-2464-4aab-a3c3-8fd29a85e580" />|
+| Cargo test output | <img width="665" height="452" alt="image" src="https://github.com/user-attachments/assets/9ba79899-fee4-4593-bc6e-612c99919726" />|
 
-## Notes
+## Addtion
 
 - Amounts on the contract are i128 stroops. The frontend converts via `xlmToStroops("1.5")` so there's no float drift.
 - The vault contract is an accounting ledger - XLM movement happens via Horizon payments alongside the contract calls (same pattern as Tip Jar). A production version would integrate the Stellar Asset Contract for native XLM custody.

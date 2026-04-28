@@ -78,10 +78,13 @@ export function useBorrow(address: string | null) {
     mutationFn: async (input: {
       principal: string;
       collateral: string;
-      durationDays: number;
+      durationSeconds: number;
     }): Promise<{ hash: string }> => {
       if (!address) throw new Error("connect a wallet first");
       const id = ensureVaultId();
+      if (input.durationSeconds <= 0) {
+        throw new Error("duration must be greater than zero");
+      }
       return invokeContract({
         contractId: id,
         method: "borrow",
@@ -89,7 +92,7 @@ export function useBorrow(address: string | null) {
           addrArg(address),
           i128Arg(xlmToStroops(input.principal)),
           i128Arg(xlmToStroops(input.collateral)),
-          u64Arg(input.durationDays * 86_400),
+          u64Arg(Math.floor(input.durationSeconds)),
         ],
         source: address,
         signXdr: signer(address),

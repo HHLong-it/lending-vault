@@ -37,11 +37,15 @@ export function BorrowerCard() {
 
   const [principal, setPrincipal] = useState("");
   const [collateral, setCollateral] = useState("");
-  const [days, setDays] = useState("7");
+  const [duration, setDuration] = useState("7");
+  const [unit, setUnit] = useState<"minutes" | "hours" | "days">("days");
 
   if (!address) return null;
 
   const hasOpenLoan = !!data?.loan;
+
+  const unitSeconds = unit === "minutes" ? 60 : unit === "hours" ? 3600 : 86_400;
+  const durationSeconds = Math.max(0, Number(duration) || 0) * unitSeconds;
 
   async function onBorrow(e: FormEvent) {
     e.preventDefault();
@@ -49,7 +53,7 @@ export function BorrowerCard() {
       await borrow.mutateAsync({
         principal,
         collateral,
-        durationDays: parseInt(days, 10),
+        durationSeconds,
       });
       setPrincipal("");
       setCollateral("");
@@ -148,24 +152,42 @@ export function BorrowerCard() {
           className={`${inputCls} font-mono`}
         />
       </div>
-      <div className="flex items-center gap-2">
-        <select
-          value={days}
-          onChange={(e) => setDays(e.target.value)}
-          className={inputCls}
-        >
-          <option value="1">1 day</option>
-          <option value="7">7 days</option>
-          <option value="30">30 days</option>
-        </select>
-        <button
-          type="submit"
-          disabled={borrow.isPending}
-          className="shrink-0 rounded-md bg-accent px-3 py-2 text-sm font-medium text-bg transition-colors hover:bg-cyan-300 disabled:opacity-50"
-        >
-          {borrow.isPending ? "Opening..." : "Open Loan"}
-        </button>
+      <div>
+        <label className="block text-[10px] uppercase tracking-wider text-subtle">
+          Loan Duration
+        </label>
+        <div className="mt-1 grid grid-cols-[1fr_auto] gap-2">
+          <input
+            type="number"
+            min="0"
+            step="any"
+            value={duration}
+            onChange={(e) => setDuration(e.target.value)}
+            required
+            className={`${inputCls} font-mono`}
+          />
+          <select
+            value={unit}
+            onChange={(e) => setUnit(e.target.value as typeof unit)}
+            className={`${inputCls} w-auto`}
+          >
+            <option value="minutes">minutes</option>
+            <option value="hours">hours</option>
+            <option value="days">days</option>
+          </select>
+        </div>
+        <div className="mt-1 text-[11px] text-subtle">
+          Tip: pick a short duration (e.g. 2 minutes) so you can demo liquidation
+          quickly.
+        </div>
       </div>
+      <button
+        type="submit"
+        disabled={borrow.isPending || durationSeconds <= 0}
+        className="w-full rounded-md bg-accent px-3 py-2 text-sm font-medium text-bg transition-colors hover:bg-cyan-300 disabled:opacity-50"
+      >
+        {borrow.isPending ? "Opening..." : "Open Loan"}
+      </button>
       {err && (
         <div className="rounded-md border border-danger/30 bg-danger/5 p-3 text-xs text-danger">
           {err instanceof UserRejectedError

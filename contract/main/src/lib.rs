@@ -23,6 +23,7 @@ pub enum Error {
     NotPastDeadline = 6,
     InsufficientLiquidity = 7,
     PoolEmpty = 8,
+    DeadlinePassed = 9,
 }
 
 #[contracttype]
@@ -198,6 +199,10 @@ impl Vault {
             .persistent()
             .get(&key)
             .ok_or(Error::NoOpenLoan)?;
+
+        if env.ledger().timestamp() >= loan.deadline {
+            return Err(Error::DeadlinePassed);
+        }
 
         let interest = accrued_interest(&env, &loan);
         env.storage().persistent().remove(&key);

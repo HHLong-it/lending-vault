@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { readContract, addrArg } from "@/lib/soroban";
+import { getRecentEvents } from "@/lib/events";
 
 const VAULT_ID = process.env.NEXT_PUBLIC_MAIN_CONTRACT_ID;
 const LP_ID = process.env.NEXT_PUBLIC_TOKEN_CONTRACT_ID;
@@ -77,6 +78,59 @@ export type Loan = {
   opened_at: bigint;
   deadline: bigint;
 };
+
+export type LiquidatablePosition = {
+  borrower: string;
+  loan: Loan;
+  debt: bigint;
+  profit: bigint;
+};
+
+export function useLiquidatablePositions() {
+  return useQuery<LiquidatablePosition[]>({
+    queryKey: ["liquidatable", VAULT_ID],
+    queryFn: async () => {
+      if (!VAULT_ID) return [];
+      const events = await getRecentEvents(VAULT_ID).catch(() => []);
+      const borrowers = Array.from(
+        new Set(
+          events
+            .filter((e) => e.kind === "borrow")
+            .map((e) => e.actor)
+        )
+      );
+      if (borrowers.length === 0) return [];
+
+      const nowSec = BigInt(Math.floor(Date.now() / 1000));
+      const positions = await Promise.all(
+        borrowers.map(async (borrower) => {
+          const [loan, debt] = await Promise.all([
+            readContract<Loan | undefined>({
+              contractId: VAULT_ID,
+              method: "loan_of",
+              args: [addrArg(borrower)],
+            }).catch(() => undefined),
+            readContract<bigint>({
+              contractId: VAULT_ID,
+              method: "debt_of",
+              args: [addrArg(borrower)],
+            }).catch(() => 0n),
+          ]);
+          if (!loan) return null;
+          if (loan.deadline > nowSec) return null;
+          const profit =
+            loan.collateral > debt ? loan.collateral - debt : 0n;
+          return { borrower, loan, debt, profit };
+        })
+      );
+      return positions
+        .filter((p): p is LiquidatablePosition => p !== null)
+        .sort((a, b) => Number(a.loan.deadline - b.loan.deadline));
+    },
+    enabled: !!VAULT_ID,
+    refetchInterval: 8_000,
+  });
+}
 
 export function useLoan(address: string | null) {
   return useQuery<{ loan: Loan | null; debt: bigint }>({

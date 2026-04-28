@@ -5,6 +5,7 @@ import { useWallet } from "@/app/wallet-context";
 import { BalanceCard } from "./balance-card";
 import { LenderCard } from "./lender-card";
 import { BorrowerCard } from "./borrower-card";
+import { LiquidationsPanel } from "./liquidations-panel";
 import { EventFeed } from "./event-feed";
 
 type Side = "lend" | "borrow";
@@ -60,6 +61,8 @@ export function Dashboard() {
           </div>
         </>
       )}
+
+      {address && <LiquidationsPanel />}
 
       <EventFeed />
     </div>

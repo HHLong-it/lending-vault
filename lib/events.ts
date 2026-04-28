@@ -19,12 +19,17 @@ export type ContractEvent = {
   amounts: bigint[];
 };
 
-const TOPICS: VaultEventKind[] = [
-  "deposit",
-  "withdraw",
-  "borrow",
-  "repay",
-  "liquidate",
+// Topic counts mirror the contract emits:
+//   deposit/withdraw/borrow/repay -> (kind, actor)             = 2 topics
+//   liquidate                     -> (kind, liquidator, borrower) = 3 topics
+// The Soroban RPC topic filter requires the count to match exactly,
+// so 2-topic events get silently dropped if we ask for 3.
+const TOPIC_LAYOUT: { kind: VaultEventKind; topicCount: 2 | 3 }[] = [
+  { kind: "deposit", topicCount: 2 },
+  { kind: "withdraw", topicCount: 2 },
+  { kind: "borrow", topicCount: 2 },
+  { kind: "repay", topicCount: 2 },
+  { kind: "liquidate", topicCount: 3 },
 ];
 
 export async function getRecentEvents(
@@ -34,11 +39,15 @@ export async function getRecentEvents(
   const latest = await sorobanRpc.getLatestLedger();
   const startLedger = Math.max(1, latest.sequence - windowLedgers);
 
-  const filters = TOPICS.map((kind) => ({
-    type: "contract" as const,
-    contractIds: [contractId],
-    topics: [[xdr.ScVal.scvSymbol(kind).toXDR("base64"), "*", "*"]],
-  }));
+  const filters = TOPIC_LAYOUT.map(({ kind, topicCount }) => {
+    const symbol = xdr.ScVal.scvSymbol(kind).toXDR("base64");
+    const topics = topicCount === 2 ? [symbol, "*"] : [symbol, "*", "*"];
+    return {
+      type: "contract" as const,
+      contractIds: [contractId],
+      topics: [topics],
+    };
+  });
 
   const all: ContractEvent[] = [];
   for (const filter of filters) {

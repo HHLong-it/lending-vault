@@ -9,6 +9,7 @@ const LP_ID = process.env.NEXT_PUBLIC_TOKEN_CONTRACT_ID;
 export type PoolState = {
   totalXlm: bigint;
   borrowedXlm: bigint;
+  availableXlm: bigint;
   totalShares: bigint;
   utilizationBps: number;
   sharePriceMicro: bigint;
@@ -34,11 +35,19 @@ export function usePoolState() {
           : Promise.resolve(0n),
       ]);
       const [totalXlm, borrowedXlm] = tup;
+      const availableXlm = totalXlm > borrowedXlm ? totalXlm - borrowedXlm : 0n;
       const utilizationBps =
         totalXlm > 0n ? Number((borrowedXlm * 10_000n) / totalXlm) : 0;
       const sharePriceMicro =
         totalShares > 0n ? (totalXlm * 1_000_000n) / totalShares : 1_000_000n;
-      return { totalXlm, borrowedXlm, totalShares, utilizationBps, sharePriceMicro };
+      return {
+        totalXlm,
+        borrowedXlm,
+        availableXlm,
+        totalShares,
+        utilizationBps,
+        sharePriceMicro,
+      };
     },
     enabled: !!VAULT_ID,
     refetchInterval: 8_000,

@@ -15,12 +15,18 @@ export function PoolStats() {
   return (
     <section className="mt-6">
       <div className="text-xs uppercase tracking-wider text-subtle">Pool</div>
-      <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <Stat label="TVL" value={`${fmtXlm(data?.totalXlm)} XLM`} loading={isLoading} />
         <Stat
           label="Borrowed"
           value={`${fmtXlm(data?.borrowedXlm)} XLM`}
           loading={isLoading}
+        />
+        <Stat
+          label="Available"
+          value={`${fmtXlm(data?.availableXlm)} XLM`}
+          loading={isLoading}
+          highlight
         />
         <Stat
           label="Utilization"
@@ -51,16 +57,28 @@ function Stat({
   loading,
   href,
   mono,
+  highlight,
 }: {
   label: string;
   value: string;
   loading: boolean;
   href?: string;
   mono?: boolean;
+  highlight?: boolean;
 }) {
   const inner = (
-    <div className="rounded-md border border-border bg-surface p-3 transition-colors">
-      <div className="text-[10px] uppercase tracking-wider text-subtle">{label}</div>
+    <div
+      className={`rounded-md border p-3 transition-colors ${
+        highlight ? "border-accent/40 bg-accent/10" : "border-border bg-surface"
+      }`}
+    >
+      <div
+        className={`text-[10px] uppercase tracking-wider ${
+          highlight ? "text-accent" : "text-subtle"
+        }`}
+      >
+        {label}
+      </div>
       <div
         className={`mt-1 font-mono font-semibold ${
           mono ? "text-sm" : "text-base sm:text-lg"

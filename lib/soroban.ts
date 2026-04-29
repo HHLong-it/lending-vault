@@ -54,7 +54,7 @@ export async function invokeContract(opts: {
     networkPassphrase,
   })
     .addOperation(contract.call(opts.method, ...opts.args))
-    .setTimeout(30)
+    .setTimeout(180)
     .build();
 
   const sim = await sorobanRpc.simulateTransaction(tx);
@@ -68,7 +68,7 @@ export async function invokeContract(opts: {
 
   const sendRes = await sorobanRpc.sendTransaction(signed);
   if (sendRes.status === "ERROR") {
-    throw new Error(`send failed: ${JSON.stringify(sendRes.errorResult)}`);
+    throw new Error(describeSendError(sendRes));
   }
   const hash = sendRes.hash;
 
@@ -83,6 +83,50 @@ export async function invokeContract(opts: {
     throw new Error(describeFailure(result, hash));
   }
   return { hash };
+}
+
+const TX_RESULT_CODES: Record<string, string> = {
+  txTooLate: "Transaction expired before it landed. The wallet held the signature past the timebound — try again.",
+  txTooEarly: "Transaction's minTime is in the future. Check your system clock.",
+  txBadSeq: "Sequence number mismatch. Reload and try again.",
+  txInsufficientFee: "Network fee was too low for current load. Try again.",
+  txInsufficientBalance: "Account balance can't cover this transaction's fee.",
+  txNoAccount: "Source account doesn't exist on the network. Fund it from friendbot.",
+  txBadAuth: "Signature didn't match the source account.",
+  txBadAuthExtra: "Extra signatures attached that weren't required.",
+  txInternalError: "Network internal error. Try again in a moment.",
+  txSorobanInvalid: "Soroban transaction was rejected as invalid.",
+  txMalformedNotEnoughTimeBounds: "Transaction is missing required Soroban timebounds.",
+};
+
+function describeSendError(res: rpc.Api.SendTransactionResponse): string {
+  const r = res as unknown as Record<string, unknown>;
+  const errorResult = r.errorResult as
+    | { result?: () => { switch?: () => { name?: string } } }
+    | undefined;
+  let codeName: string | undefined;
+  try {
+    codeName = errorResult?.result?.()?.switch?.()?.name;
+  } catch {
+    // ignore — fall through
+  }
+  if (codeName && TX_RESULT_CODES[codeName]) {
+    return TX_RESULT_CODES[codeName];
+  }
+  if (codeName) {
+    return `Send failed: ${codeName}`;
+  }
+  const errorXdr = r.errorResultXdr ?? r.errorResult;
+  let raw = "";
+  if (typeof errorXdr === "string") raw = errorXdr;
+  else if (errorXdr && typeof (errorXdr as { toXDR?: (f: string) => string }).toXDR === "function") {
+    try {
+      raw = (errorXdr as { toXDR: (f: string) => string }).toXDR("base64");
+    } catch {
+      // ignore
+    }
+  }
+  return raw ? `Send failed (raw): ${raw}` : "Send failed.";
 }
 
 function describeFailure(result: rpc.Api.GetTransactionResponse, hash: string): string {

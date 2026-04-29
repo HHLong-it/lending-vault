@@ -123,7 +123,7 @@ struct Loan {
 | `deposit(lender, amount)` | `Address, i128` | `i128` (shares minted) | `AmountMustBePositive`, `NotInitialized` |
 | `withdraw(lender, shares)` | `Address, i128` | `i128` (XLM out) | `AmountMustBePositive`, `PoolEmpty`, `InsufficientLiquidity` |
 | `borrow(borrower, principal, collateral, duration_seconds)` | `Address, i128, i128, u64` | `u64` (deadline) | `AmountMustBePositive`, `LoanAlreadyOpen`, `InsufficientCollateral`, `InsufficientLiquidity` |
-| `repay(borrower)` | `Address` | `i128` (interest paid) | `NoOpenLoan` |
+| `repay(borrower)` | `Address` | `i128` (interest paid) | `NoOpenLoan`, `DeadlinePassed` |
 | `liquidate(liquidator, borrower)` | `Address, Address` | `i128` (collateral claimed) | `NoOpenLoan`, `NotPastDeadline` |
 | `pool_state()` | - | `(i128, i128)` total / borrowed | - |
 | `loan_of(borrower)` | `Address` | `Option<Loan>` | - |
@@ -166,6 +166,7 @@ Vault errors (`Error` enum):
 | `LoanAlreadyOpen` | Borrower tries to open a second concurrent loan |
 | `NoOpenLoan` | repay/liquidate called with no matching loan |
 | `NotPastDeadline` | Liquidator tried before `now >= deadline` |
+| `DeadlinePassed` | Borrower tried `repay` after `now >= deadline` (loan must be liquidated instead) |
 | `InsufficientLiquidity` | Pool's idle XLM can't cover the borrow / withdraw |
 | `PoolEmpty` | Withdraw called on empty pool |
 
@@ -186,6 +187,7 @@ Vault (`contract/main/src/test.rs`):
 | `borrow_under_ltv_succeeds` | Happy path open-loan + state mutation |
 | `borrow_over_ltv_returns_error` | Typed `InsufficientCollateral` on under-collateralized borrow |
 | `repay_with_interest_releases_loan` | Time-advanced repay; interest > 0; pool grows |
+| `repay_after_deadline_returns_error` | Typed `DeadlinePassed` blocks self-repay once expired; loan stays open for liquidator |
 | `liquidate_past_deadline_clears_loan` | Third-party liquidation after deadline |
 | `liquidate_before_deadline_returns_error` | Typed `NotPastDeadline` if too early |
 | `debt_grows_over_time` | Interest accrual is monotonic |
@@ -202,7 +204,7 @@ LP Shares (`contract/receipt/src/test.rs`):
 | `metadata_is_correct` | name / symbol / decimals constants |
 | `admin_can_be_transferred` | `set_admin` works |
 
-15 tests total. CI runs them on every push.
+16 tests total. CI runs them on every push.
 
 ## Build & Deploy
 

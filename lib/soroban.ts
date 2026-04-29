@@ -80,9 +80,106 @@ export async function invokeContract(opts: {
     tries++;
   }
   if (result.status === "FAILED") {
-    throw new Error("contract call failed on chain");
+    throw new Error(describeFailure(result, hash));
   }
   return { hash };
+}
+
+function describeFailure(result: rpc.Api.GetTransactionResponse, hash: string): string {
+  const xdrStrings: string[] = [];
+  const r = result as unknown as Record<string, unknown>;
+  const push = (v: unknown) => {
+    if (!v) return;
+    if (typeof v === "string") xdrStrings.push(v);
+    else if (typeof (v as { toXDR?: (f: string) => string }).toXDR === "function") {
+      try {
+        xdrStrings.push((v as { toXDR: (f: string) => string }).toXDR("base64"));
+      } catch {
+        // ignore xdr serialization errors
+      }
+    }
+  };
+  push(r.resultXdr);
+  push(r.resultMetaXdr);
+  const diag = r.diagnosticEventsXdr;
+  if (Array.isArray(diag)) for (const d of diag) push(d);
+
+  const events = collectDiagnosticEvents(r);
+  for (const ev of events) {
+    try {
+      xdrStrings.push(ev.toXDR("base64"));
+    } catch {
+      // ignore
+    }
+    const code = readContractErrorCode(ev);
+    if (code !== null) {
+      return `Error(Contract, #${code}) on tx ${hash}`;
+    }
+  }
+
+  const explorer = `https://stellar.expert/explorer/testnet/tx/${hash}`;
+  const tail = xdrStrings.length
+    ? ` Raw: ${xdrStrings.join(" | ").slice(0, 600)}`
+    : "";
+  return `Tx ${hash} failed on chain. ${explorer}${tail}`;
+}
+
+function collectDiagnosticEvents(r: Record<string, unknown>): xdr.DiagnosticEvent[] {
+  const out: xdr.DiagnosticEvent[] = [];
+  const raw = r.diagnosticEventsXdr;
+  if (Array.isArray(raw)) {
+    for (const item of raw) {
+      try {
+        if (typeof item === "string") {
+          out.push(xdr.DiagnosticEvent.fromXDR(item, "base64"));
+        } else if (item && typeof (item as xdr.DiagnosticEvent).event === "function") {
+          out.push(item as xdr.DiagnosticEvent);
+        }
+      } catch {
+        // skip malformed
+      }
+    }
+  }
+  try {
+    const meta = r.resultMetaXdr as xdr.TransactionMeta | undefined;
+    if (meta && typeof meta.switch === "function") {
+      const v = Number(meta.switch());
+      const sorobanMeta =
+        v === 3
+          ? meta.v3().sorobanMeta()
+          : v === 4
+            ? (meta as unknown as { v4: () => { sorobanMeta: () => xdr.SorobanTransactionMeta | null } }).v4().sorobanMeta()
+            : null;
+      const events = sorobanMeta?.diagnosticEvents() ?? [];
+      out.push(...events);
+    }
+  } catch {
+    // older meta versions don't have soroban events
+  }
+  return out;
+}
+
+function readContractErrorCode(ev: xdr.DiagnosticEvent): number | null {
+  try {
+    const body = ev.event().body().value() as { topics?: () => xdr.ScVal[]; data?: () => xdr.ScVal };
+    const candidates: xdr.ScVal[] = [];
+    if (typeof body?.topics === "function") candidates.push(...body.topics());
+    if (typeof body?.data === "function") {
+      const d = body.data();
+      if (d) candidates.push(d);
+    }
+    for (const c of candidates) {
+      if (c.switch().name === "scvError") {
+        const err = c.error();
+        if (err.switch().name === "sceContract") {
+          return err.contractCode();
+        }
+      }
+    }
+  } catch {
+    // unparseable event
+  }
+  return null;
 }
 
 export async function readContract<T = unknown>(opts: {

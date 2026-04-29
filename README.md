@@ -6,10 +6,10 @@ Over-collateralized XLM lending pool on Stellar Testnet. Vault contract orchestr
 
 ```text
 network:    Stellar Testnet
-vault:      CCVEILXHBWQGKCA6B546OV4HENG2OSKDGKFMREOBDM7OUUFDDFP5D5KR
-            https://stellar.expert/explorer/testnet/contract/CCVEILXHBWQGKCA6B546OV4HENG2OSKDGKFMREOBDM7OUUFDDFP5D5KR
-lp_shares:  CCMREGHT4T75OG3PRJIQCSOW5RUQY4HEVTD7FTHYOLSLNCSZN36SRPUM
-            https://stellar.expert/explorer/testnet/contract/CCMREGHT4T75OG3PRJIQCSOW5RUQY4HEVTD7FTHYOLSLNCSZN36SRPUM
+vault:      CBHQYXE4F5VRQI33TSGYBYRCXIP72HXGJPZXOSJ3BHMARRL4RZHCZTF4
+            https://stellar.expert/explorer/testnet/contract/CBHQYXE4F5VRQI33TSGYBYRCXIP72HXGJPZXOSJ3BHMARRL4RZHCZTF4
+lp_shares:  CB4NUBETYAIIOO2CO4QTVMB6JTVZR7KKRZS2BCTS5XXZIGW6APE566FM
+            https://stellar.expert/explorer/testnet/contract/CB4NUBETYAIIOO2CO4QTVMB6JTVZR7KKRZS2BCTS5XXZIGW6APE566FM
 demo: https://lending-vault-dun.vercel.app/
 video: https://drive.google.com/file/d/1lo0K5qAlsBXkDnD1DGl5mG7Q8jaAcNx2/view?usp=sharing    
 ```

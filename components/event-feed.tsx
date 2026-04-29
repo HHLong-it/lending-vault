@@ -35,13 +35,7 @@ export function EventFeed() {
     <div className="rounded-lg border border-border bg-surface p-5">
       <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-subtle">
         Activity
-        <span className="flex items-center gap-1.5 text-accent">
-          <span className="relative flex h-1.5 w-1.5">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-75" />
-            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent" />
-          </span>
-          Live
-        </span>
+        <span className="text-[10px] font-mono text-accent tracking-[0.3em]">▌ TAPE</span>
       </div>
       {isLoading ? (
         <div className="mt-3 space-y-2">

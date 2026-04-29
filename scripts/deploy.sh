@@ -26,6 +26,11 @@ fi
 ADMIN=$(stellar keys address "$SOURCE")
 echo "==> deployer: $ADMIN"
 
+echo "==> resolving native xlm sac"
+XLM=$(stellar contract id asset --asset native --network "$NETWORK")
+[[ "$XLM" =~ ^C[A-Z0-9]{55}$ ]] || { echo "couldn't resolve native xlm sac: $XLM"; exit 1; }
+echo "    -> $XLM"
+
 write_env() {
   local key="$1" value="$2"
   if [ -f "$ENV_FILE" ] && grep -q "^$key=" "$ENV_FILE"; then
@@ -66,7 +71,7 @@ if [ "$USES_TOKEN" -eq 1 ]; then
     --wasm "$MAIN_WASM" \
     --source "$SOURCE" \
     --network "$NETWORK" \
-    -- --lp_shares "$RECEIPT" \
+    -- --lp_shares "$RECEIPT" --xlm "$XLM" \
     2>&1 | tail -1)
 else
   MAIN=$(stellar contract deploy \
@@ -88,6 +93,7 @@ if [ "$USES_TOKEN" -eq 1 ]; then
 fi
 
 write_env NEXT_PUBLIC_MAIN_CONTRACT_ID "$MAIN"
+write_env NEXT_PUBLIC_XLM_CONTRACT_ID "$XLM"
 if [ "$USES_TOKEN" -eq 1 ]; then
   write_env NEXT_PUBLIC_TOKEN_CONTRACT_ID "$RECEIPT"
 fi
@@ -95,6 +101,7 @@ fi
 echo "==> wrote ids to $ENV_FILE"
 echo
 echo "main:    https://stellar.expert/explorer/testnet/contract/$MAIN"
+echo "xlm:     https://stellar.expert/explorer/testnet/contract/$XLM"
 if [ "$USES_TOKEN" -eq 1 ]; then
   echo "token:   https://stellar.expert/explorer/testnet/contract/$RECEIPT"
 fi

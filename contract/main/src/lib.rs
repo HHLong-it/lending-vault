@@ -2,7 +2,7 @@
 
 use soroban_sdk::{
     contract, contractclient, contracterror, contractimpl, contracttype,
-    symbol_short, Address, Env,
+    symbol_short, token, Address, Env,
 };
 
 const LTV_NUM: i128 = 100;
@@ -30,9 +30,19 @@ pub enum Error {
 #[derive(Clone)]
 pub enum DataKey {
     LpShares,
+    Xlm,
     TotalXlm,
     BorrowedXlm,
     Loan(Address),
+}
+
+fn xlm_client(env: &Env) -> Result<token::Client<'_>, Error> {
+    let addr: Address = env
+        .storage()
+        .instance()
+        .get(&DataKey::Xlm)
+        .ok_or(Error::NotInitialized)?;
+    Ok(token::Client::new(env, &addr))
 }
 
 #[contracttype]
@@ -57,8 +67,9 @@ pub struct Vault;
 
 #[contractimpl]
 impl Vault {
-    pub fn __constructor(env: Env, lp_shares: Address) {
+    pub fn __constructor(env: Env, lp_shares: Address, xlm: Address) {
         env.storage().instance().set(&DataKey::LpShares, &lp_shares);
+        env.storage().instance().set(&DataKey::Xlm, &xlm);
         env.storage().instance().set(&DataKey::TotalXlm, &0_i128);
         env.storage().instance().set(&DataKey::BorrowedXlm, &0_i128);
     }
@@ -82,6 +93,9 @@ impl Vault {
         } else {
             amount * total_shares / total_xlm
         };
+
+        let xlm = xlm_client(&env)?;
+        xlm.transfer(&lender, &env.current_contract_address(), &amount);
 
         env.storage()
             .instance()
@@ -126,6 +140,9 @@ impl Vault {
         env.storage()
             .instance()
             .set(&DataKey::TotalXlm, &(total_xlm - xlm_out));
+
+        let xlm = xlm_client(&env)?;
+        xlm.transfer(&env.current_contract_address(), &lender, &xlm_out);
 
         env.events()
             .publish((symbol_short!("withdraw"), lender), (shares, xlm_out));
@@ -184,6 +201,11 @@ impl Vault {
             .instance()
             .set(&DataKey::BorrowedXlm, &(borrowed + principal));
 
+        // collateral in, principal out
+        let xlm = xlm_client(&env)?;
+        xlm.transfer(&borrower, &env.current_contract_address(), &collateral);
+        xlm.transfer(&env.current_contract_address(), &borrower, &principal);
+
         env.events().publish(
             (symbol_short!("borrow"), borrower),
             (principal, collateral, deadline),
@@ -223,6 +245,12 @@ impl Vault {
         env.storage()
             .instance()
             .set(&DataKey::TotalXlm, &(total_xlm + interest));
+
+        // borrower repays principal + interest, collateral returns
+        let xlm = xlm_client(&env)?;
+        let owed = loan.principal + interest;
+        xlm.transfer(&borrower, &env.current_contract_address(), &owed);
+        xlm.transfer(&env.current_contract_address(), &borrower, &loan.collateral);
 
         env.events().publish(
             (symbol_short!("repay"), borrower),
@@ -270,6 +298,11 @@ impl Vault {
             .instance()
             .set(&DataKey::TotalXlm, &(total_xlm + interest));
 
+        // liquidator pays the debt to settle the loan, claims the collateral
+        let xlm = xlm_client(&env)?;
+        xlm.transfer(&liquidator, &env.current_contract_address(), &debt);
+        xlm.transfer(&env.current_contract_address(), &liquidator, &loan.collateral);
+
         env.events().publish(
             (symbol_short!("liquidate"), liquidator, borrower),
             (loan.collateral, debt),
@@ -310,6 +343,13 @@ impl Vault {
         env.storage()
             .instance()
             .get(&DataKey::LpShares)
+            .ok_or(Error::NotInitialized)
+    }
+
+    pub fn xlm_contract(env: Env) -> Result<Address, Error> {
+        env.storage()
+            .instance()
+            .get(&DataKey::Xlm)
             .ok_or(Error::NotInitialized)
     }
 }

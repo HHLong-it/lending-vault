@@ -2,22 +2,32 @@
 
 use super::{Error, Vault, VaultClient};
 use receipt_token::{ReceiptToken, ReceiptTokenClient};
-use soroban_sdk::{testutils::{Address as _, Ledger}, Address, Env};
+use soroban_sdk::{
+    testutils::{Address as _, Ledger},
+    token::{StellarAssetClient, TokenClient},
+    Address, Env,
+};
 
 struct Ctx<'a> {
     env: Env,
     vault: VaultClient<'a>,
     lp: ReceiptTokenClient<'a>,
+    xlm: TokenClient<'a>,
+    xlm_admin: StellarAssetClient<'a>,
 }
 
 fn setup<'a>() -> Ctx<'a> {
     let env = Env::default();
     env.mock_all_auths();
 
+    let issuer = Address::generate(&env);
+    let xlm_sac = env.register_stellar_asset_contract_v2(issuer);
+    let xlm_addr = xlm_sac.address();
+
     let placeholder = Address::generate(&env);
     let lp_id = env.register(ReceiptToken, (placeholder,));
 
-    let vault_id = env.register(Vault, (lp_id.clone(),));
+    let vault_id = env.register(Vault, (lp_id.clone(), xlm_addr.clone()));
 
     let lp = ReceiptTokenClient::new(&env, &lp_id);
     lp.set_admin(&vault_id);
@@ -25,8 +35,14 @@ fn setup<'a>() -> Ctx<'a> {
     Ctx {
         vault: VaultClient::new(&env, &vault_id),
         lp,
+        xlm: TokenClient::new(&env, &xlm_addr),
+        xlm_admin: StellarAssetClient::new(&env, &xlm_addr),
         env,
     }
+}
+
+fn fund(ctx: &Ctx, who: &Address, amount: i128) {
+    ctx.xlm_admin.mint(who, &amount);
 }
 
 fn advance(env: &Env, seconds: u64) {
@@ -39,6 +55,7 @@ fn advance(env: &Env, seconds: u64) {
 fn first_deposit_mints_one_for_one() {
     let ctx = setup();
     let alice = Address::generate(&ctx.env);
+    fund(&ctx, &alice, 100_000_000);
 
     let shares = ctx.vault.deposit(&alice, &100_000_000);
 
@@ -48,6 +65,8 @@ fn first_deposit_mints_one_for_one() {
     let (total, borrowed) = ctx.vault.pool_state();
     assert_eq!(total, 100_000_000);
     assert_eq!(borrowed, 0);
+    // alice's XLM is now in the vault
+    assert_eq!(ctx.xlm.balance(&alice), 0);
 }
 
 #[test]
@@ -55,6 +74,8 @@ fn subsequent_deposit_uses_share_price() {
     let ctx = setup();
     let alice = Address::generate(&ctx.env);
     let bob = Address::generate(&ctx.env);
+    fund(&ctx, &alice, 100_000_000);
+    fund(&ctx, &bob, 50_000_000);
 
     ctx.vault.deposit(&alice, &100_000_000);
     let bob_shares = ctx.vault.deposit(&bob, &50_000_000);
@@ -69,6 +90,8 @@ fn borrow_under_ltv_succeeds() {
     let ctx = setup();
     let alice = Address::generate(&ctx.env);
     let bob = Address::generate(&ctx.env);
+    fund(&ctx, &alice, 200_000_000);
+    fund(&ctx, &bob, 110_000_000); // collateral
 
     ctx.vault.deposit(&alice, &200_000_000);
 
@@ -80,6 +103,8 @@ fn borrow_under_ltv_succeeds() {
     assert_eq!(loan.collateral, 110_000_000);
     let (_, borrowed) = ctx.vault.pool_state();
     assert_eq!(borrowed, 100_000_000);
+    // bob received the principal
+    assert_eq!(ctx.xlm.balance(&bob), 100_000_000);
 }
 
 #[test]
@@ -87,6 +112,8 @@ fn borrow_over_ltv_returns_error() {
     let ctx = setup();
     let alice = Address::generate(&ctx.env);
     let bob = Address::generate(&ctx.env);
+    fund(&ctx, &alice, 200_000_000);
+    fund(&ctx, &bob, 109_000_000);
 
     ctx.vault.deposit(&alice, &200_000_000);
 
@@ -100,12 +127,17 @@ fn repay_with_interest_releases_loan() {
     let ctx = setup();
     let alice = Address::generate(&ctx.env);
     let bob = Address::generate(&ctx.env);
+    fund(&ctx, &alice, 200_000_000);
+    fund(&ctx, &bob, 110_000_000); // collateral; principal arrives during borrow
 
     ctx.vault.deposit(&alice, &200_000_000);
     ctx.vault.borrow(&bob, &100_000_000, &110_000_000, &86_400);
 
     // accrue interest but stay strictly before the deadline
     advance(&ctx.env, 80_000);
+
+    // top up bob to cover the small interest amount on top of the principal he holds
+    fund(&ctx, &bob, 10_000_000);
 
     let interest = ctx.vault.repay(&bob);
 
@@ -121,6 +153,8 @@ fn repay_after_deadline_returns_error() {
     let ctx = setup();
     let alice = Address::generate(&ctx.env);
     let bob = Address::generate(&ctx.env);
+    fund(&ctx, &alice, 200_000_000);
+    fund(&ctx, &bob, 110_000_000);
 
     ctx.vault.deposit(&alice, &200_000_000);
     ctx.vault.borrow(&bob, &100_000_000, &110_000_000, &86_400);
@@ -139,6 +173,9 @@ fn liquidate_past_deadline_clears_loan() {
     let alice = Address::generate(&ctx.env);
     let bob = Address::generate(&ctx.env);
     let carol = Address::generate(&ctx.env);
+    fund(&ctx, &alice, 200_000_000);
+    fund(&ctx, &bob, 110_000_000);
+    fund(&ctx, &carol, 200_000_000); // liquidator pays the debt
 
     ctx.vault.deposit(&alice, &200_000_000);
     ctx.vault.borrow(&bob, &100_000_000, &110_000_000, &86_400);
@@ -151,6 +188,8 @@ fn liquidate_past_deadline_clears_loan() {
     assert!(ctx.vault.loan_of(&bob).is_none());
     let (_, borrowed) = ctx.vault.pool_state();
     assert_eq!(borrowed, 0);
+    // carol now holds the collateral
+    assert!(ctx.xlm.balance(&carol) >= 110_000_000);
 }
 
 #[test]
@@ -159,6 +198,9 @@ fn liquidate_before_deadline_returns_error() {
     let alice = Address::generate(&ctx.env);
     let bob = Address::generate(&ctx.env);
     let carol = Address::generate(&ctx.env);
+    fund(&ctx, &alice, 200_000_000);
+    fund(&ctx, &bob, 110_000_000);
+    fund(&ctx, &carol, 200_000_000);
 
     ctx.vault.deposit(&alice, &200_000_000);
     ctx.vault.borrow(&bob, &100_000_000, &110_000_000, &86_400);
@@ -174,6 +216,8 @@ fn debt_grows_over_time() {
     let ctx = setup();
     let alice = Address::generate(&ctx.env);
     let bob = Address::generate(&ctx.env);
+    fund(&ctx, &alice, 200_000_000);
+    fund(&ctx, &bob, 110_000_000);
 
     ctx.vault.deposit(&alice, &200_000_000);
     ctx.vault.borrow(&bob, &100_000_000, &110_000_000, &86_400);

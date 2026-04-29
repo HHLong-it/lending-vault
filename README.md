@@ -261,7 +261,7 @@ See [`deploy.md`](./deploy.md) for the full walkthrough.
 | Live activity feed | <img width="1185" height="704" alt="image" src="https://github.com/user-attachments/assets/404426e3-df11-41d3-b2d8-3bffbd9e6730" />|
 | Mobile view | <img width="390" height="621" alt="image" src="https://github.com/user-attachments/assets/6baa251b-222e-4ae3-a9d3-5a1ff43a7d53" />|
 | CI passing | <img width="907" height="160" alt="image" src="https://github.com/user-attachments/assets/ceeb3d50-2464-4aab-a3c3-8fd29a85e580" />|
-| Cargo test output | <img width="665" height="452" alt="image" src="https://github.com/user-attachments/assets/9ba79899-fee4-4593-bc6e-612c99919726" />|
+| Cargo test output | <img width="667" height="445" alt="image" src="https://github.com/user-attachments/assets/5fde6fff-92ed-4cf2-a12a-9ca00401ad6a" />|
 
 ## Addtion
 

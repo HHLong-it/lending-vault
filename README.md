@@ -6,10 +6,10 @@ Over-collateralized XLM lending pool on Stellar Testnet. Vault contract orchestr
 
 ```text
 network:    Stellar Testnet
-vault:      CAHV53LUYGRMX7QJDLYLPXZYJCIAS3CRNLH5Z53WGLYYFBEP3GCW6EWM
-            https://stellar.expert/explorer/testnet/contract/CAHV53LUYGRMX7QJDLYLPXZYJCIAS3CRNLH5Z53WGLYYFBEP3GCW6EWM
-lp_shares:  CCPSWJYRBLX2MY4QEQ5IF4MQ5THE6YMI7HULWZIADPP4SDLWHTLIZ7T4
-            https://stellar.expert/explorer/testnet/contract/CCPSWJYRBLX2MY4QEQ5IF4MQ5THE6YMI7HULWZIADPP4SDLWHTLIZ7T4
+vault:      CAHYVMR4RHQR25VPYCE3ZOLI2M5QFEMB333XWSGBAAHCLVADOJ4KPJAA
+            https://stellar.expert/explorer/testnet/contract/CAHYVMR4RHQR25VPYCE3ZOLI2M5QFEMB333XWSGBAAHCLVADOJ4KPJAA
+lp_shares:  CBYG4PLFMVB3SYJU63GPDXGWMGEQ5TU7GVOLH76AFTZUGPO55Q74UGDF
+            https://stellar.expert/explorer/testnet/contract/CBYG4PLFMVB3SYJU63GPDXGWMGEQ5TU7GVOLH76AFTZUGPO55Q74UGDF
 demo: https://lending-vault-dun.vercel.app/
 video: https://drive.google.com/file/d/1lo0K5qAlsBXkDnD1DGl5mG7Q8jaAcNx2/view?usp=sharing    
 ```
@@ -123,7 +123,7 @@ struct Loan {
 | `deposit(lender, amount)` | `Address, i128` | `i128` (shares minted) | `AmountMustBePositive`, `NotInitialized` |
 | `withdraw(lender, shares)` | `Address, i128` | `i128` (XLM out) | `AmountMustBePositive`, `PoolEmpty`, `InsufficientLiquidity` |
 | `borrow(borrower, principal, collateral, duration_seconds)` | `Address, i128, i128, u64` | `u64` (deadline) | `AmountMustBePositive`, `LoanAlreadyOpen`, `InsufficientCollateral`, `InsufficientLiquidity` |
-| `repay(borrower)` | `Address` | `i128` (interest paid) | `NoOpenLoan`, `DeadlinePassed` |
+| `repay(borrower, payment)` | `Address, i128` | `i128` (interest credited to pool) | `AmountMustBePositive`, `NoOpenLoan`, `DeadlinePassed`, `InsufficientPayment` |
 | `liquidate(liquidator, borrower)` | `Address, Address` | `i128` (collateral claimed) | `NoOpenLoan`, `NotPastDeadline` |
 | `pool_state()` | - | `(i128, i128)` total / borrowed | - |
 | `loan_of(borrower)` | `Address` | `Option<Loan>` | - |
@@ -148,7 +148,7 @@ struct Loan {
 | `useDeposit(addr).mutate(xlm)` | `Vault.deposit` | `{hash}` | `xlm` is human-readable; converted to stroops |
 | `useWithdraw(addr).mutate(shares)` | `Vault.withdraw` | `{hash}` | shares as decimal LP units |
 | `useBorrow(addr).mutate({principal, collateral, durationDays})` | `Vault.borrow` | `{hash}` | days converted to seconds |
-| `useRepay(addr).mutate()` | `Vault.repay` | `{hash}` | no args; vault uses caller |
+| `useRepay(addr).mutate()` | `Vault.repay` | `{hash}` | reads `debt_of` then sends `payment = live_debt + 0.001 XLM` so auth args stay stable |
 | `useLiquidate(addr).mutate(borrowerAddr)` | `Vault.liquidate` | `{hash}` | any third party can call |
 | `usePoolState()` | `Vault.pool_state` + `LP.total_supply` | `PoolState` | computes utilization + share price |
 | `useLpBalance(addr)` | `LP.balance` | `bigint` | LP-share balance for the user |
@@ -167,6 +167,7 @@ Vault errors (`Error` enum):
 | `NoOpenLoan` | repay/liquidate called with no matching loan |
 | `NotPastDeadline` | Liquidator tried before `now >= deadline` |
 | `DeadlinePassed` | Borrower tried `repay` after `now >= deadline` (loan must be liquidated instead) |
+| `InsufficientPayment` | `repay` was called with `payment < live_debt` — quote `debt_of(borrower)` plus a small buffer |
 | `InsufficientLiquidity` | Pool's idle XLM can't cover the borrow / withdraw |
 | `PoolEmpty` | Withdraw called on empty pool |
 
@@ -186,7 +187,8 @@ Vault (`contract/main/src/test.rs`):
 | `subsequent_deposit_uses_share_price` | Proportional minting with non-empty pool |
 | `borrow_under_ltv_succeeds` | Happy path open-loan + state mutation |
 | `borrow_over_ltv_returns_error` | Typed `InsufficientCollateral` on under-collateralized borrow |
-| `repay_with_interest_releases_loan` | Time-advanced repay; interest > 0; pool grows |
+| `repay_with_interest_releases_loan` | Time-advanced repay; payment = live_debt + buffer; pool grows |
+| `repay_with_underpayment_returns_error` | Typed `InsufficientPayment` if `payment < live_debt` |
 | `repay_after_deadline_returns_error` | Typed `DeadlinePassed` blocks self-repay once expired; loan stays open for liquidator |
 | `liquidate_past_deadline_clears_loan` | Third-party liquidation after deadline |
 | `liquidate_before_deadline_returns_error` | Typed `NotPastDeadline` if too early |
@@ -205,7 +207,7 @@ LP Shares (`contract/receipt/src/test.rs`):
 | `metadata_is_correct` | name / symbol / decimals constants |
 | `admin_can_be_transferred` | `set_admin` works |
 
-17 tests total. CI runs them on every push.
+18 tests total. CI runs them on every push.
 
 ## Build & Deploy
 

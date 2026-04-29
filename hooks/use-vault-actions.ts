@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { networkPassphrase } from "@/lib/stellar";
 import {
   invokeContract,
+  readContract,
   addrArg,
   i128Arg,
   u64Arg,
@@ -102,16 +103,29 @@ export function useBorrow(address: string | null) {
   });
 }
 
+// 0.001 XLM buffer over live debt — covers any interest that accrues between
+// our quote and the host re-checking debt at submit time. Excess goes to the
+// pool. Picks a value much larger than the per-second interest tick (~2 stroops
+// for typical loans) so we never trip InsufficientPayment.
+const REPAY_BUFFER_STROOPS = 10_000n;
+
 export function useRepay(address: string | null) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (): Promise<{ hash: string }> => {
       if (!address) throw new Error("connect a wallet first");
       const id = ensureVaultId();
+      const live = await readContract<bigint>({
+        contractId: id,
+        method: "debt_of",
+        args: [addrArg(address)],
+        source: address,
+      });
+      const payment = (live ?? 0n) + REPAY_BUFFER_STROOPS;
       return invokeContract({
         contractId: id,
         method: "repay",
-        args: [addrArg(address)],
+        args: [addrArg(address), i128Arg(payment)],
         source: address,
         signXdr: signer(address),
       });

@@ -32,6 +32,7 @@ const CONTRACT_ERRORS: Record<number, string> = {
   7: "Insufficient liquidity in the pool.",
   8: "Pool is empty.",
   9: "Deadline has passed: this loan can only be liquidated now.",
+  10: "Payment amount was below the live debt. Refresh and try again.",
 };
 
 export function decodeContractError(message: string): string | null {

@@ -24,6 +24,7 @@ pub enum Error {
     InsufficientLiquidity = 7,
     PoolEmpty = 8,
     DeadlinePassed = 9,
+    InsufficientPayment = 10,
 }
 
 #[contracttype]
@@ -213,8 +214,16 @@ impl Vault {
         Ok(deadline)
     }
 
-    pub fn repay(env: Env, borrower: Address) -> Result<i128, Error> {
+    // Borrower passes a `payment` amount they're willing to spend (>= live debt).
+    // Contract pulls exactly `payment` so the SAC transfer arg matches what was
+    // signed at simulation time, even if interest ticked up during the wallet
+    // round-trip. Excess goes to the pool (lenders' favor). Front-end should
+    // quote `debt_of(borrower) + buffer` to avoid InsufficientPayment.
+    pub fn repay(env: Env, borrower: Address, payment: i128) -> Result<i128, Error> {
         borrower.require_auth();
+        if payment <= 0 {
+            return Err(Error::AmountMustBePositive);
+        }
         let key = DataKey::Loan(borrower.clone());
         let loan: Loan = env
             .storage()
@@ -226,7 +235,12 @@ impl Vault {
             return Err(Error::DeadlinePassed);
         }
 
-        let interest = accrued_interest(&env, &loan);
+        let live_debt = loan.principal + accrued_interest(&env, &loan);
+        if payment < live_debt {
+            return Err(Error::InsufficientPayment);
+        }
+
+        let interest_credited = payment - loan.principal;
         env.storage().persistent().remove(&key);
 
         let borrowed: i128 = env
@@ -244,19 +258,17 @@ impl Vault {
             .unwrap_or(0);
         env.storage()
             .instance()
-            .set(&DataKey::TotalXlm, &(total_xlm + interest));
+            .set(&DataKey::TotalXlm, &(total_xlm + interest_credited));
 
-        // borrower repays principal + interest, collateral returns
         let xlm = xlm_client(&env)?;
-        let owed = loan.principal + interest;
-        xlm.transfer(&borrower, &env.current_contract_address(), &owed);
+        xlm.transfer(&borrower, &env.current_contract_address(), &payment);
         xlm.transfer(&env.current_contract_address(), &borrower, &loan.collateral);
 
         env.events().publish(
             (symbol_short!("repay"), borrower),
-            (loan.principal, interest),
+            (loan.principal, interest_credited),
         );
-        Ok(interest)
+        Ok(interest_credited)
     }
 
     pub fn liquidate(

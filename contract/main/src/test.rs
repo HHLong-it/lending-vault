@@ -139,13 +139,35 @@ fn repay_with_interest_releases_loan() {
     // top up bob to cover the small interest amount on top of the principal he holds
     fund(&ctx, &bob, 10_000_000);
 
-    let interest = ctx.vault.repay(&bob);
+    let live_debt = ctx.vault.debt_of(&bob);
+    let payment = live_debt + 1_000; // small buffer goes to the pool
+    let interest_credited = ctx.vault.repay(&bob, &payment);
 
-    assert!(interest > 0);
+    assert!(interest_credited > 0);
+    assert_eq!(interest_credited, payment - 100_000_000);
     assert!(ctx.vault.loan_of(&bob).is_none());
     let (total, borrowed) = ctx.vault.pool_state();
     assert_eq!(borrowed, 0);
-    assert_eq!(total, 200_000_000 + interest);
+    assert_eq!(total, 200_000_000 + interest_credited);
+}
+
+#[test]
+fn repay_with_underpayment_returns_error() {
+    let ctx = setup();
+    let alice = Address::generate(&ctx.env);
+    let bob = Address::generate(&ctx.env);
+    fund(&ctx, &alice, 200_000_000);
+    fund(&ctx, &bob, 110_000_000);
+
+    ctx.vault.deposit(&alice, &200_000_000);
+    ctx.vault.borrow(&bob, &100_000_000, &110_000_000, &86_400);
+    advance(&ctx.env, 80_000);
+
+    let live_debt = ctx.vault.debt_of(&bob);
+    let underpay = live_debt - 1;
+    let result = ctx.vault.try_repay(&bob, &underpay);
+    assert_eq!(result, Err(Ok(Error::InsufficientPayment)));
+    assert!(ctx.vault.loan_of(&bob).is_some());
 }
 
 #[test]
@@ -161,7 +183,7 @@ fn repay_after_deadline_returns_error() {
 
     advance(&ctx.env, 86_400);
 
-    let result = ctx.vault.try_repay(&bob);
+    let result = ctx.vault.try_repay(&bob, &200_000_000);
     assert_eq!(result, Err(Ok(Error::DeadlinePassed)));
     // loan must still be open so a liquidator can claim the collateral
     assert!(ctx.vault.loan_of(&bob).is_some());

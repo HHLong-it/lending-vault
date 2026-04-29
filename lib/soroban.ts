@@ -155,9 +155,14 @@ function describeFailure(result: rpc.Api.GetTransactionResponse, hash: string): 
     } catch {
       // ignore
     }
-    const code = readContractErrorCode(ev);
-    if (code !== null) {
-      return `Error(Contract, #${code}) on tx ${hash}`;
+    const decoded = readDiagnosticError(ev);
+    if (decoded?.kind === "contract") {
+      return `Error(Contract, #${decoded.code}) on tx ${hash}`;
+    }
+    if (decoded?.kind === "host") {
+      const key = `${decoded.type}/${decoded.code}`;
+      const hint = HOST_ERROR_HINTS[key];
+      if (hint) return hint;
     }
   }
 
@@ -188,14 +193,14 @@ function collectDiagnosticEvents(r: Record<string, unknown>): xdr.DiagnosticEven
     const meta = r.resultMetaXdr as xdr.TransactionMeta | undefined;
     if (meta && typeof meta.switch === "function") {
       const v = Number(meta.switch());
-      const sorobanMeta =
-        v === 3
-          ? meta.v3().sorobanMeta()
-          : v === 4
-            ? (meta as unknown as { v4: () => { sorobanMeta: () => xdr.SorobanTransactionMeta | null } }).v4().sorobanMeta()
-            : null;
-      const events = sorobanMeta?.diagnosticEvents() ?? [];
-      out.push(...events);
+      if (v === 3) {
+        const sorobanMeta = meta.v3().sorobanMeta();
+        out.push(...(sorobanMeta?.diagnosticEvents() ?? []));
+      } else if (v === 4) {
+        // in v4 diagnostic events live on the v4 root, not on sorobanMeta
+        const v4 = (meta as unknown as { v4: () => { diagnosticEvents: () => xdr.DiagnosticEvent[] } }).v4();
+        out.push(...(v4.diagnosticEvents() ?? []));
+      }
     }
   } catch {
     // older meta versions don't have soroban events
@@ -203,7 +208,11 @@ function collectDiagnosticEvents(r: Record<string, unknown>): xdr.DiagnosticEven
   return out;
 }
 
-function readContractErrorCode(ev: xdr.DiagnosticEvent): number | null {
+type DiagError =
+  | { kind: "contract"; code: number }
+  | { kind: "host"; type: string; code: string };
+
+function readDiagnosticError(ev: xdr.DiagnosticEvent): DiagError | null {
   try {
     const body = ev.event().body().value() as { topics?: () => xdr.ScVal[]; data?: () => xdr.ScVal };
     const candidates: xdr.ScVal[] = [];
@@ -213,18 +222,31 @@ function readContractErrorCode(ev: xdr.DiagnosticEvent): number | null {
       if (d) candidates.push(d);
     }
     for (const c of candidates) {
-      if (c.switch().name === "scvError") {
-        const err = c.error();
-        if (err.switch().name === "sceContract") {
-          return err.contractCode();
-        }
-      }
+      if (c.switch().name !== "scvError") continue;
+      const err = c.error();
+      const k = err.switch().name;
+      if (k === "sceContract") return { kind: "contract", code: err.contractCode() };
+      const codeName = (err as unknown as { code?: () => { name: string } }).code?.()?.name ?? "";
+      return { kind: "host", type: k, code: codeName };
     }
   } catch {
     // unparseable event
   }
   return null;
 }
+
+function readContractErrorCode(ev: xdr.DiagnosticEvent): number | null {
+  const e = readDiagnosticError(ev);
+  return e?.kind === "contract" ? e.code : null;
+}
+
+const HOST_ERROR_HINTS: Record<string, string> = {
+  "sceAuth/scecInvalidAction":
+    "Authorization mismatch: the on-chain auth tree didn't match the actual call args. Most often this means an arg drifted between simulation and submission. Refresh and try again.",
+  "sceAuth/scecExceededLimit": "Authorization tree exceeded the host's depth limit.",
+  "sceStorage/scecExceededLimit": "Contract ran out of ledger storage budget.",
+  "sceBudget/scecExceededLimit": "Contract exceeded its CPU/memory budget.",
+};
 
 export async function readContract<T = unknown>(opts: {
   contractId: string;

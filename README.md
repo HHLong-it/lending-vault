@@ -6,10 +6,10 @@ Over-collateralized XLM lending pool on Stellar Testnet. Vault contract orchestr
 
 ```text
 network:    Stellar Testnet
-vault:      CBHQYXE4F5VRQI33TSGYBYRCXIP72HXGJPZXOSJ3BHMARRL4RZHCZTF4
-            https://stellar.expert/explorer/testnet/contract/CBHQYXE4F5VRQI33TSGYBYRCXIP72HXGJPZXOSJ3BHMARRL4RZHCZTF4
-lp_shares:  CB4NUBETYAIIOO2CO4QTVMB6JTVZR7KKRZS2BCTS5XXZIGW6APE566FM
-            https://stellar.expert/explorer/testnet/contract/CB4NUBETYAIIOO2CO4QTVMB6JTVZR7KKRZS2BCTS5XXZIGW6APE566FM
+vault:      CAHV53LUYGRMX7QJDLYLPXZYJCIAS3CRNLH5Z53WGLYYFBEP3GCW6EWM
+            https://stellar.expert/explorer/testnet/contract/CAHV53LUYGRMX7QJDLYLPXZYJCIAS3CRNLH5Z53WGLYYFBEP3GCW6EWM
+lp_shares:  CCPSWJYRBLX2MY4QEQ5IF4MQ5THE6YMI7HULWZIADPP4SDLWHTLIZ7T4
+            https://stellar.expert/explorer/testnet/contract/CCPSWJYRBLX2MY4QEQ5IF4MQ5THE6YMI7HULWZIADPP4SDLWHTLIZ7T4
 demo: https://lending-vault-dun.vercel.app/
 video: https://drive.google.com/file/d/1lo0K5qAlsBXkDnD1DGl5mG7Q8jaAcNx2/view?usp=sharing    
 ```
@@ -191,6 +191,7 @@ Vault (`contract/main/src/test.rs`):
 | `liquidate_past_deadline_clears_loan` | Third-party liquidation after deadline |
 | `liquidate_before_deadline_returns_error` | Typed `NotPastDeadline` if too early |
 | `debt_grows_over_time` | Interest accrual is monotonic |
+| `debt_pins_at_deadline` | Interest stops accruing after deadline (keeps liquidate's transfer args stable for Soroban auth) |
 
 LP Shares (`contract/receipt/src/test.rs`):
 
@@ -204,7 +205,7 @@ LP Shares (`contract/receipt/src/test.rs`):
 | `metadata_is_correct` | name / symbol / decimals constants |
 | `admin_can_be_transferred` | `set_admin` works |
 
-16 tests total. CI runs them on every push.
+17 tests total. CI runs them on every push.
 
 ## Build & Deploy
 

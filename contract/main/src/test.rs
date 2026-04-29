@@ -228,3 +228,24 @@ fn debt_grows_over_time() {
 
     assert!(debt_30k_secs_later > debt_at_open);
 }
+
+#[test]
+fn debt_pins_at_deadline() {
+    let ctx = setup();
+    let alice = Address::generate(&ctx.env);
+    let bob = Address::generate(&ctx.env);
+    fund(&ctx, &alice, 200_000_000);
+    fund(&ctx, &bob, 110_000_000);
+
+    ctx.vault.deposit(&alice, &200_000_000);
+    ctx.vault.borrow(&bob, &100_000_000, &110_000_000, &86_400);
+
+    advance(&ctx.env, 86_400);
+    let debt_at_deadline = ctx.vault.debt_of(&bob);
+
+    advance(&ctx.env, 60);
+    assert_eq!(ctx.vault.debt_of(&bob), debt_at_deadline);
+
+    advance(&ctx.env, 86_400 * 7);
+    assert_eq!(ctx.vault.debt_of(&bob), debt_at_deadline);
+}

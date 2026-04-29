@@ -363,9 +363,13 @@ fn lp_client<'a>(env: &Env) -> Result<LpClient<'a>, Error> {
     Ok(LpClient::new(env, &addr))
 }
 
+// interest stops accruing at the deadline. once a loan is past due the debt is
+// pinned, which keeps liquidate's `transfer` args stable between simulation and
+// submission so soroban auth doesn't mismatch.
 fn accrued_interest(env: &Env, loan: &Loan) -> i128 {
     let now = env.ledger().timestamp();
-    let elapsed = now.saturating_sub(loan.opened_at) as i128;
+    let cap = if now < loan.deadline { now } else { loan.deadline };
+    let elapsed = cap.saturating_sub(loan.opened_at) as i128;
     loan.principal * APR_BPS * elapsed / (BPS_DEN * SECONDS_PER_YEAR)
 }
 

@@ -10,9 +10,11 @@ vault:      CAHYVMR4RHQR25VPYCE3ZOLI2M5QFEMB333XWSGBAAHCLVADOJ4KPJAA
             https://stellar.expert/explorer/testnet/contract/CAHYVMR4RHQR25VPYCE3ZOLI2M5QFEMB333XWSGBAAHCLVADOJ4KPJAA
 lp_shares:  CBYG4PLFMVB3SYJU63GPDXGWMGEQ5TU7GVOLH76AFTZUGPO55Q74UGDF
             https://stellar.expert/explorer/testnet/contract/CBYG4PLFMVB3SYJU63GPDXGWMGEQ5TU7GVOLH76AFTZUGPO55Q74UGDF
-demo: https://lending-vault-dun.vercel.app/
-video: https://drive.google.com/file/d/1lo0K5qAlsBXkDnD1DGl5mG7Q8jaAcNx2/view?usp=sharing    
 ```
+Demo: https://lending-vault-dun.vercel.app/
+
+Video: https://drive.google.com/file/d/1rGCpHiOM0Qqp5KlDfS4IhzyzwANZQH4h/view?usp=sharing  
+
 
 ## Features
 
@@ -264,7 +266,7 @@ See [`deploy.md`](./deploy.md) for the full walkthrough.
 | Live activity feed | <img width="1185" height="704" alt="image" src="https://github.com/user-attachments/assets/404426e3-df11-41d3-b2d8-3bffbd9e6730" />|
 | Mobile view | <img width="390" height="621" alt="image" src="https://github.com/user-attachments/assets/6baa251b-222e-4ae3-a9d3-5a1ff43a7d53" />|
 | CI passing | <img width="907" height="160" alt="image" src="https://github.com/user-attachments/assets/ceeb3d50-2464-4aab-a3c3-8fd29a85e580" />|
-| Cargo test output | <img width="667" height="445" alt="image" src="https://github.com/user-attachments/assets/5fde6fff-92ed-4cf2-a12a-9ca00401ad6a" />|
+| Cargo test output |<img width="660" height="482" alt="image" src="https://github.com/user-attachments/assets/692cba54-554a-4135-99d8-6db8441a20b4" /> | 
 
 ## Addtion
 
